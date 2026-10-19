@@ -1,0 +1,411 @@
+--// ADMIN AIM ASSIST + WALL ESP
+--// For your own Roblox Studio experience
+--// LocalScript: StarterPlayer > StarterPlayerScripts
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-- SETTINGS
+local Settings = {
+    AimEnabled = false,
+    ESPEnabled = false,
+    ShowNames = true,
+    ShowDistance = true,
+    TeamCheck = true,
+
+    FOV = 120,
+    MaxDistance = 300,
+    Smoothness = 0.15
+}
+
+local ESPObjects = {}
+local Connections = {}
+
+-- GUI
+local Gui = Instance.new("ScreenGui")
+Gui.Name = "AdminControlPanel"
+Gui.ResetOnSpawn = false
+Gui.Parent = PlayerGui
+
+local Frame = Instance.new("Frame")
+Frame.Name = "MainFrame"
+Frame.Size = UDim2.fromOffset(260, 365)
+Frame.Position = UDim2.new(0, 20, 0.25, 0)
+Frame.BackgroundColor3 = Color3.fromRGB(25, 27, 35)
+Frame.BorderSizePixel = 0
+Frame.Parent = Gui
+
+Instance.new("UICorner", Frame).CornerRadius =
+    UDim.new(0, 12)
+
+local Stroke = Instance.new("UIStroke")
+Stroke.Color = Color3.fromRGB(85, 130, 255)
+Stroke.Thickness = 1.5
+Stroke.Parent = Frame
+
+local Layout = Instance.new("UIListLayout")
+Layout.Padding = UDim.new(0, 7)
+Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+Layout.SortOrder = Enum.SortOrder.LayoutOrder
+Layout.Parent = Frame
+
+local function CreateButton(text, order, callback)
+    local Button = Instance.new("TextButton")
+    Button.Name = "ControlButton"
+    Button.Size = UDim2.new(1, -20, 0, 32)
+    Button.BackgroundColor3 = Color3.fromRGB(43, 47, 60)
+    Button.TextColor3 = Color3.fromRGB(245, 245, 255)
+    Button.TextSize = 13
+    Button.Font = Enum.Font.GothamMedium
+    Button.Text = text
+    Button.LayoutOrder = order
+    Button.AutoButtonColor = true
+    Button.Parent = Frame
+
+    Instance.new("UICorner", Button).CornerRadius =
+        UDim.new(0, 7)
+
+    Button.Activated:Connect(function()
+        callback(Button)
+    end)
+
+    return Button
+end
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -10, 0, 42)
+Title.BackgroundTransparency = 1
+Title.Text = "ADMIN CONTROL PANEL"
+Title.TextColor3 = Color3.fromRGB(120, 165, 255)
+Title.TextSize = 17
+Title.Font = Enum.Font.GothamBold
+Title.LayoutOrder = 0
+Title.Parent = Frame
+
+-- ESP CLEANUP
+local function RemoveESP(Target)
+    local Objects = ESPObjects[Target]
+
+    if Objects then
+        for _, Object in ipairs(Objects) do
+            if Object and Object.Parent then
+                Object:Destroy()
+            end
+        end
+
+        ESPObjects[Target] = nil
+    end
+end
+
+-- CREATE ESP
+local function CreateESP(Target)
+    if Target == LocalPlayer then
+        return
+    end
+
+    local Character = Target.Character
+    if not Character then
+        return
+    end
+
+    local Head = Character:FindFirstChild("Head")
+    if not Head then
+        return
+    end
+
+    RemoveESP(Target)
+
+    -- Highlight visible through walls
+    local Highlight = Instance.new("Highlight")
+    Highlight.Name = "AdminPlayerHighlight"
+    Highlight.Adornee = Character
+    Highlight.FillColor = Color3.fromRGB(65, 155, 255)
+    Highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    Highlight.FillTransparency = 0.55
+    Highlight.OutlineTransparency = 0
+    Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    Highlight.Enabled = Settings.ESPEnabled
+    Highlight.Parent = Character
+
+    -- Player label visible through walls
+    local Billboard = Instance.new("BillboardGui")
+    Billboard.Name = "AdminPlayerLabel"
+    Billboard.Adornee = Head
+    Billboard.Size = UDim2.fromOffset(200, 45)
+    Billboard.StudsOffset = Vector3.new(0, 2.8, 0)
+    Billboard.AlwaysOnTop = true
+    Billboard.Enabled = Settings.ESPEnabled
+    Billboard.Parent = PlayerGui
+
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.fromScale(1, 1)
+    Label.BackgroundTransparency = 1
+    Label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    Label.TextStrokeTransparency = 0.15
+    Label.TextSize = 13
+    Label.Font = Enum.Font.GothamBold
+    Label.Parent = Billboard
+
+    ESPObjects[Target] = {
+        Highlight,
+        Billboard,
+        Label
+    }
+end
+
+-- UPDATE ESP
+local function UpdateESP()
+    local MyCharacter = LocalPlayer.Character
+    local MyRoot = MyCharacter
+        and MyCharacter:FindFirstChild("HumanoidRootPart")
+
+    for _, Target in ipairs(Players:GetPlayers()) do
+        if Target == LocalPlayer then
+            continue
+        end
+
+        local Character = Target.Character
+        local Humanoid = Character
+            and Character:FindFirstChildOfClass("Humanoid")
+        local Root = Character
+            and Character:FindFirstChild("HumanoidRootPart")
+
+        if not MyRoot or not Root or not Humanoid
+            or Humanoid.Health <= 0 then
+            RemoveESP(Target)
+            continue
+        end
+
+        local Distance = (MyRoot.Position - Root.Position).Magnitude
+
+        local SameTeam = Settings.TeamCheck
+            and LocalPlayer.Team ~= nil
+            and Target.Team == LocalPlayer.Team
+
+        if Distance > Settings.MaxDistance or SameTeam then
+            RemoveESP(Target)
+            continue
+        end
+
+        if not ESPObjects[Target] then
+            CreateESP(Target)
+        end
+
+        local Objects = ESPObjects[Target]
+
+        if Objects then
+            local Highlight = Objects[1]
+            local Billboard = Objects[2]
+            local Label = Objects[3]
+
+            Highlight.Enabled = Settings.ESPEnabled
+            Billboard.Enabled = Settings.ESPEnabled
+
+            local TextParts = {}
+
+            if Settings.ShowNames then
+                table.insert(TextParts, Target.DisplayName)
+            end
+
+            if Settings.ShowDistance then
+                table.insert(
+                    TextParts,
+                    string.format("%d studs", Distance)
+                )
+            end
+
+            Label.Text = table.concat(TextParts, " | ")
+        end
+    end
+end
+
+-- MENU CONTROLS
+CreateButton("Aim Assist: OFF", 1, function(Button)
+    Settings.AimEnabled = not Settings.AimEnabled
+    Button.Text = "Aim Assist: " ..
+        (Settings.AimEnabled and "ON" or "OFF")
+end)
+
+CreateButton("Wall ESP: OFF", 2, function(Button)
+    Settings.ESPEnabled = not Settings.ESPEnabled
+    Button.Text = "Wall ESP: " ..
+        (Settings.ESPEnabled and "ON" or "OFF")
+end)
+
+CreateButton("Player Names: ON", 3, function(Button)
+    Settings.ShowNames = not Settings.ShowNames
+    Button.Text = "Player Names: " ..
+        (Settings.ShowNames and "ON" or "OFF")
+end)
+
+CreateButton("Distance: ON", 4, function(Button)
+    Settings.ShowDistance = not Settings.ShowDistance
+    Button.Text = "Distance: " ..
+        (Settings.ShowDistance and "ON" or "OFF")
+end)
+
+CreateButton("Team Check: ON", 5, function(Button)
+    Settings.TeamCheck = not Settings.TeamCheck
+    Button.Text = "Team Check: " ..
+        (Settings.TeamCheck and "ON" or "OFF")
+end)
+
+CreateButton("FOV: 120", 6, function(Button)
+    Settings.FOV += 40
+
+    if Settings.FOV > 240 then
+        Settings.FOV = 80
+    end
+
+    Button.Text = "FOV: " .. Settings.FOV
+end)
+
+CreateButton("Max Distance: 300", 7, function(Button)
+    Settings.MaxDistance += 100
+
+    if Settings.MaxDistance > 600 then
+        Settings.MaxDistance = 100
+    end
+
+    Button.Text = "Max Distance: " .. Settings.MaxDistance
+end)
+
+CreateButton("Hide Menu", 8, function()
+    Frame.Visible = false
+end)
+
+-- KEYBOARD MENU TOGGLE
+Connections.Input = UserInputService.InputBegan:Connect(
+    function(Input, Processed)
+        if not Processed
+            and Input.KeyCode == Enum.KeyCode.RightShift then
+            Frame.Visible = not Frame.Visible
+        end
+    end
+)
+
+-- AIM ASSIST TARGET SELECTION
+local function GetAimTarget()
+    local Camera = workspace.CurrentCamera
+    if not Camera then
+        return nil
+    end
+
+    local BestTarget = nil
+    local BestDistance = Settings.FOV
+    local ViewportCenter = Camera.ViewportSize / 2
+
+    for _, Target in ipairs(Players:GetPlayers()) do
+        if Target == LocalPlayer then
+            continue
+        end
+
+        if Settings.TeamCheck
+            and LocalPlayer.Team ~= nil
+            and Target.Team == LocalPlayer.Team then
+            continue
+        end
+
+        local Character = Target.Character
+        local Head = Character and Character:FindFirstChild("Head")
+        local Humanoid = Character
+            and Character:FindFirstChildOfClass("Humanoid")
+
+        if Head and Humanoid and Humanoid.Health > 0 then
+            local ScreenPosition, OnScreen =
+                Camera:WorldToViewportPoint(Head.Position)
+
+            if OnScreen then
+                local ScreenDistance = (
+                    Vector2.new(ScreenPosition.X, ScreenPosition.Y)
+                    - ViewportCenter
+                ).Magnitude
+
+                if ScreenDistance < BestDistance then
+                    BestDistance = ScreenDistance
+                    BestTarget = Head
+                end
+            end
+        end
+    end
+
+    return BestTarget
+end
+
+-- MAIN UPDATE
+Connections.Render = RunService.RenderStepped:Connect(function()
+    UpdateESP()
+
+    if not Settings.AimEnabled then
+        return
+    end
+
+    local Camera = workspace.CurrentCamera
+    if not Camera then
+        return
+    end
+
+    local Target = GetAimTarget()
+
+    if Target then
+        local Goal = CFrame.lookAt(
+            Camera.CFrame.Position,
+            Target.Position
+        )
+
+        Camera.CFrame = Camera.CFrame:Lerp(
+            Goal,
+            math.clamp(Settings.Smoothness, 0, 1)
+        )
+    end
+end)
+
+-- NEW PLAYERS AND RESPAWNS
+local function SetupPlayer(Target)
+    if Target == LocalPlayer then
+        return
+    end
+
+    Connections[Target] =
+        Target.CharacterAdded:Connect(function()
+            task.wait(1)
+            if Settings.ESPEnabled then
+                CreateESP(Target)
+            end
+        end)
+end
+
+for _, Target in ipairs(Players:GetPlayers()) do
+    SetupPlayer(Target)
+end
+
+Connections.PlayerAdded = Players.PlayerAdded:Connect(SetupPlayer)
+
+Connections.PlayerRemoving = Players.PlayerRemoving:Connect(function(Target)
+    RemoveESP(Target)
+
+    if Connections[Target] then
+        Connections[Target]:Disconnect()
+        Connections[Target] = nil
+    end
+end)
+
+-- CLEANUP
+script.Destroying:Connect(function()
+    for Target in pairs(ESPObjects) do
+        RemoveESP(Target)
+    end
+
+    for _, Connection in pairs(Connections) do
+        if typeof(Connection) == "RBXScriptConnection" then
+            Connection:Disconnect()
+        end
+    end
+
+    Gui:Destroy()
+end)
